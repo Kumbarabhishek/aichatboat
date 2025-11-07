@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AgriTec Vision — Human-like Voice Chatbot</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{--green:#1b5e20;--accent:#43a047;--muted:#666;--card:#fff;--bg:#f4faf4}
+  body{font-family:Inter,system-ui,Roboto,Arial;margin:0;background:var(--bg);color:#072b1f}
+  header{background:linear-gradient(90deg,var(--green),#2e7d32);color:white;padding:18px}
+  .container{max-width:1200px;margin:18px auto;padding:14px}
+  main{display:grid;grid-template-columns:1.6fr .9fr;gap:16px}
+  @media(max-width:980px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+  .scheme{border-left:5px solid var(--green);padding:12px;margin-bottom:12px;border-radius:8px;background:#fff}
+  .scheme h3{margin:0;color:var(--green);cursor:pointer}
+  .meta{color:var(--muted);font-size:0.95rem}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  button.btn{background:var(--accent);color:white;padding:8px 12px;border:none;border-radius:8px;cursor:pointer}
+  a.link{color:var(--green);font-weight:600;text-decoration:none}
+  .details{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed #e9f2ea}
+  .step{background:#f7fff7;padding:10px;border-radius:8px;margin-bottom:8px}
+  .label{font-weight:700;color:#184d35}
+  .chat{display:flex;flex-direction:column;height:520px}
+  .chat-log{flex:1;overflow:auto;padding:10px;background:#fbfffb;border-radius:8px;border:1px solid #eef7ef}
+  .msg{margin:8px 0;padding:10px;border-radius:12px;max-width:78%}
+  .msg.user{background:#e1f4e3;margin-left:auto}
+  .msg.bot{background:#f0fff4;margin-right:auto}
+  .chat-controls{display:flex;gap:8px;margin-top:8px;align-items:center}
+  input[type="text"],select{padding:8px;border-radius:8px;border:1px solid #e5e7eb;width:100%}
+  #mic{background:#4caf50;border:none;color:white;padding:8px;border-radius:50%;cursor:pointer}
+  footer{margin-top:12px;text-align:center;color:var(--muted)}
+  .small{font-size:0.9rem;color:var(--muted)}
+  .voice-settings{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <h1>AgriTec Vision — Human-like Voice Chatbot</h1>
+    <p class="small">Ask about schemes (PM-KISAN, PMFBY, KCC, Rythu Bandhu, KALIA...) — bot auto-detects language and speaks naturally.</p>
+  </div>
+</header>
+
+<div class="container">
+  <main>
+    <!-- Left: Schemes -->
+    <section>
+      <div class="card">
+        <h2>Major Central Schemes</h2>
+        <div id="schemesContainer"></div>
+
+        <hr/>
+        <h2>Representative State Schemes</h2>
+        <div id="stateSchemesContainer"></div>
+
+        <div style="display:flex;gap:10px;margin-top:10px;align-items:center">
+          <div style="flex:1" class="small">Click a scheme title to have the chatbot explain it aloud—human-sounding voice selected on the right.</div>
+          <button class="btn" id="updateChart">Update Chart</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Chart + Chat -->
+    <aside>
+      <div class="card">
+        <h3>Schemes Overview</h3>
+        <canvas id="overviewChart" width="340" height="220"></canvas>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Chatbot</h3>
+          <div class="voice-settings">
+            <label class="small">Language</label>
+            <select id="preferredLanguage"><option value="auto">Auto-detect</option><option value="en">English</option><option value="hi">Hindi</option><option value="kn">Kannada</option></select>
+            <label class="small">Voice</label>
+            <select id="voiceSelect"></select>
+          </div>
+        </div>
+
+        <div class="chat" style="margin-top:8px">
+          <div id="chatLog" class="chat-log"></div>
+          <div class="chat-controls">
+            <button id="mic">🎤</button>
+            <input type="text" id="userInput" placeholder="Type or speak your question..." aria-label="user-input"/>
+            <button id="sendBtn" class="btn">Send</button>
+          </div>
+          <div class="small" style="margin-top:6px">Tip: try "How to apply for PM-KISAN?" or "ಪಿಎಂ ಕಿಸಾನ್ ಅಪ್ಲಿಕೇಶನ್ ಹೇಗೆ?"</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h4 style="margin:0 0 8px">Quick Links</h4>
+        <ul style="margin:0;padding-left:16px" class="small">
+          <li><a class="link" href="https://pmkisan.gov.in/" target="_blank">PM-KISAN</a></li>
+          <li><a class="link" href="https://pmfby.gov.in/" target="_blank">PMFBY</a></li>
+          <li><a class="link" href="https://soilhealth.dac.gov.in/" target="_blank">Soil Health Card</a></li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer>© AgriTec Vision — Offline human-like voice demo</footer>
+</div>
+
+<script>
+/* ----------------------------
+   Data (schemes) — English + Kannada + small Hindi fallback
+   Extend this list as needed
+   ---------------------------- */
+const CENTRAL_SCHEMES = [
+  { id:'pmkisan', name:'PM-KISAN', en:{title:'Pradhan Mantri Kisan Samman Nidhi', short:'Direct income support: ₹6,000/year (3 installments).', how:'Visit pmkisan.gov.in → Farmers Corner → New Farmer Registration. Provide Aadhaar & bank details.', docs:['Aadhaar','Bank passbook','Land records (if requested)'], link:'https://pmkisan.gov.in/' }, kn:{short:'ನೇರ ಆದಾಯ ಸಹಾಯ: ವರ್ಷಕ್ಕೆ ₹6,000 (3 ಹಂತಗಳು).', how:'PM-KISAN ಪೋರ್ಟಲ್ → Farmers Corner → New Farmer Registration ನಲ್ಲಿ ನೋಂದಣಿ ಮಾಡಿ. ಆಧಾರ್ ಮತ್ತು ಬ್ಯಾಂಕ್ ವಿವರಗಳನ್ನು ನೀಡಿ.', docs:['ಆಧಾರ್','ಬ್ಯಾಂಕ್ ಪಾಸ್‌ಬುಕ್','ಭೂ ದಾಖಲೆ'], link:'https://pmkisan.gov.in/'}, hi:{short:'पीएम-किसान: वर्ष में ₹6,000 सहायता।', how:'pmkisan.gov.in पर Farmers Corner → New Farmer Registration भरें।'} },
+  { id:'pmfby', name:'PMFBY', en:{title:'Pradhan Mantri Fasal Bima Yojana', short:'Crop insurance to cover loss from natural calamities, pests & diseases.', how:'Enroll via your local agriculture office, bank, or authorised vendor during the enrollment window.', docs:['Farmer ID / Aadhaar','Bank account','Crop & land details'], link:'https://pmfby.gov.in/' }, kn:{short:'ಬೆಳೆ ವಿಮೆ — ಪ್ರಕೃತಿ ವಿಪತ್ತುಗಳಿಂದ ರಕ್ಷಣೆ.', how:'ನಿಮ್ಮ ಸ್ಥಳೀಯ ಕೃಷಿ ಕಚೇರಿ ಅಥವಾ ಬ್ಯಾಂಕಿನ ಮೂಲಕ ನೋಂದಣಿ ಮಾಡಿ.', docs:['ರೈತ ID','ಬ್ಯಾಂಕ್ ಖಾತೆ'], link:'https://pmfby.gov.in/'}, hi:{short:'फसल बीमा (PMFBY) — नुकसान से सुरक्षा।'} },
+  { id:'pmksy', name:'PMKSY', en:{title:'Pradhan Mantri Krishi Sinchai Yojana', short:'Irrigation & water use efficiency (Har Khet Ko Pani).', how:'Contact state PMKSY agency or district irrigation office for schemes and forms.', docs:['Land records','Scheme-specific forms'], link:'https://pmksy.gov.in/' }, kn:{short:'ನೀರು ವ್ಯಯದ ಪರಿಣಾಮಕಾರಿತ್ವ ಹಾಗೂ ನೀರಾವರಿ ವಿಸ್ತರಣೆ.', how:'ರಾಜ್ಯದ PMKSY ಜಾರಿಗಾರರನ್ನು ಸಂಪರ್ಕಿಸಿ.'}, hi:{short:'सिंचाई कार्यक्रम PMKSY।'} },
+  { id:'soilhealth', name:'Soil Health Card', en:{title:'Soil Health Card Scheme', short:'Soil testing & nutrient recommendations to improve yields.', how:'Collect soil samples as per local guidelines and submit to Soil Testing Lab; use recommendations.', docs:['Sample form','Farmer ID / land details'], link:'https://soilhealth.dac.gov.in/' }, kn:{short:'ಮಣ್ಣು ಪರೀಕ್ಷೆ ಮತ್ತು ಶಿಫಾರಸುಗಳು.', how:'ಸ್ಥಳೀಯ ಮಣ್ಣಿನ ಪರೀಕ್ಷಾ ಕೇಂದ್ರಕ್ಕೆ ಮಾದರಿ ಸಲ್ಲಿಸಿ.'}, hi:{short:'मिट्टी परीक्षण और सलाह (Soil Health Card)।'} },
+  { id:'enam', name:'e-NAM', en:{title:'e-NAM', short:'Online market connecting mandis to improve price realization.', how:'Register as farmer/trader on e-NAM portal or through your mandi.', docs:['Identity','Bank details','Mandi registration docs'], link:'https://enam.gov.in/web/' }, kn:{short:'ಆನ್ಲೈನ್‌ ಮಾರುಕಟ್ಟೆ (e-NAM).'}, hi:{short:'e-NAM ऑनलाइन कृषि बाजार।'} },
+  { id:'kcc', name:'KCC', en:{title:'Kisan Credit Card', short:'Timely short-term credit for cultivation and allied activities.', how:'Apply at your bank branch with KCC application and documents.', docs:['Identity','Farm records','Income proof'], link:'https://www.mygov.in/kisancreditcard/' }, kn:{short:'ಕೃಷಿ ಸಾಲಕ್ಕಾಗಿ KCC.'}, hi:{short:'किसान क्रेडिट कार्ड (KCC)।'} },
+  { id:'kalia', name:'KALIA (Odisha)', en:{title:'KALIA', short:'Support for small & marginal farmers in Odisha.', how:'Visit kalia.odisha.gov.in or local agriculture office to check eligibility & apply.', docs:['Aadhaar','Bank details','Family / land records'], link:'https://kalia.odisha.gov.in/' }, kn:{short:'ಒಡಿಶಾದ ಸಣ್ಣ ರೈತರಿಗೆ ಸಹಾಯ.'}, hi:{short:'ओडिशा KALIA योजना।'} }
+];
+
+const STATE_SCHEMES = [
+  { id:'rythubandhu', name:'Rythu Bandhu (Telangana)', en:{short:'Investment support: ₹5,000/acre/season.', how:'Based on land records; contact local revenue/agri office.' ,docs:['RTC / land records','Bank details'], link:'https://rythubandhu.telangana.gov.in/' }, kn:{short:'ಎಕರೆಗೆ ₹5,000 ಪ್ರತಿಸೀಸನ್.'}, hi:{short:'Rythu Bandhu: निवेश सहायता।'} },
+  { id:'mahadbt', name:'MahaDBT (Maharashtra)', en:{short:'One portal for state subsidies & farmer schemes.', how:'Register on MahaDBT with Aadhaar & bank details and apply for schemes.', docs:['Aadhaar','Bank details'], link:'https://mahadbt.maharashtra.gov.in/' }, kn:{short:'ಮಹಾDBT ರಾಜ್ಯ ಪೋರ್ಟಲ್.'}, hi:{short:'MahaDBT पोर्टल (महाराष्ट्र)।'} },
+  { id:'raithasiri', name:'Raitha Siri (Karnataka)', en:{short:'Support & subsidy schemes for farmers in Karnataka.', how:'Contact Raita Mitra / district agriculture office to enroll.', docs:['Aadhaar','Land records'], link:'https://raitamitra.karnataka.gov.in/' }, kn:{short:'ಕರ್ನಾಟಕ ರೈತರಿಗೆ ಬೆಂಬಲ.'}, hi:{short:'Raitha Siri योजना (Karnataka)।'} }
+];
+
+/* ----------------------------
+   Helper: render scheme lists
+   ---------------------------- */
+function renderLists(){
+  const c = document.getElementById('schemesContainer');
+  c.innerHTML = '';
+  CENTRAL_SCHEMES.forEach(s=>{
+    const art = document.createElement('article');
+    art.className = 'scheme';
+    art.id = s.id;
+    art.innerHTML = `<h3 data-id="${s.id}">${s.en.title || s.name}</h3>
+      <div class="meta">${s.en.short}</div>
+      <div class="row">
+        <a class="link" href="${s.en.link}" target="_blank">Official portal</a>
+        <button class="btn" data-target="${s.id}-details">Details</button>
+      </div>
+      <div class="details" id="${s.id}-details"></div>`;
+    c.appendChild(art);
+    fillDetails(art, s);
+  });
+
+  const sc = document.getElementById('stateSchemesContainer');
+  sc.innerHTML = '';
+  STATE_SCHEMES.forEach(s=>{
+    const art = document.createElement('article');
+    art.className = 'scheme';
+    art.id = s.id;
+    art.innerHTML = `<h3 data-id="${s.id}">${s.name}</h3>
+      <div class="meta">${s.en.short}</div>
+      <div class="row">
+        <a class="link" href="${s.en.link}" target="_blank">Official portal</a>
+        <button class="btn" data-target="${s.id}-details">Details</button>
+      </div>
+      <div class="details" id="${s.id}-details"></div>`;
+    sc.appendChild(art);
+    fillDetails(art, s);
+  });
+
+  // toggle details and wire h3 click to ask bot
+  document.querySelectorAll('button[data-target]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-target'), el = document.getElementById(id);
+      if(!el) return;
+      document.querySelectorAll('.details').forEach(d=>{ if(d!==el) d.style.display='none'; });
+      el.style.display = (el.style.display==='block')?'none':'block';
+      if(el.style.display==='block') el.scrollIntoView({behavior:'smooth',block:'center'});
+    })
+  });
+  document.querySelectorAll('.scheme h3').forEach(h=>{
+    h.addEventListener('click', ()=> {
+      const id = h.getAttribute('data-id');
+      if(id) handleUserMessage(id);
+    });
+  });
+}
+
+function fillDetails(art, s){
+  const det = art.querySelector('.details');
+  const en = s.en, kn = s.kn;
+  det.innerHTML = `
+    <div class="step"><div class="label">How to apply (EN)</div><div>${en.how || 'See official portal'}</div></div>
+    <div class="step"><div class="label">How to apply (KN)</div><div>${kn.how || en.how}</div></div>
+    <div class="step"><div class="label">Required documents</div><ul>${(en.docs||[]).map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="step"><a class="link" href="${en.link}" target="_blank">Open official page</a></div>
+  `;
+}
+
+/* ----------------------------
+   Chart (counts)
+   ---------------------------- */
+const ctx = document.getElementById('overviewChart').getContext('2d');
+const chart = new Chart(ctx, { type:'doughnut', data:{ labels:['Central','State'], datasets:[{ data:[0,0], backgroundColor:['#66bb6a','#4db6ac'] }] }, options:{plugins:{legend:{position:'bottom'}}} });
+function updateChart(){ chart.data.datasets[0].data = [CENTRAL_SCHEMES.length, STATE_SCHEMES.length]; chart.update(); }
+document.getElementById('updateChart').addEventListener('click', updateChart);
+
+/* ----------------------------
+   Natural-language matching + canned replies
+   ---------------------------- */
+const canned = {}; // will fill from data for en/kn/hi
+function buildCanned(){
+  canned.en = {}; canned.kn = {}; canned.hi = {};
+  const add = (lang,key,text)=>{ canned[lang][key]=text; };
+  const all = CENTRAL_SCHEMES.concat(STATE_SCHEMES);
+  all.forEach(s=>{
+    const key = s.id.toLowerCase();
+    add('en', key, `${s.en.title || s.name}. ${s.en.short} How to apply: ${s.en.how} Documents: ${(s.en.docs||[]).join(', ')}. Official: ${s.en.link}`);
+    add('kn', key, `${s.name} — ${s.kn.short}. అప್ಲಿ: ${s.kn.how || s.en.how}. ದಾಖಲಾತಿಗಳು: ${(s.en.docs||[]).join(', ')}. ಅಧಿಕೃತ: ${s.kn.link || s.en.link}`);
+    add('hi', key, `${s.name}. ${s.en.short} Visit ${s.en.link}`);
+    // also map simple names
+    add('en', s.name.toLowerCase(), canned.en[key]);
+    add('kn', s.name.toLowerCase(), canned.kn[key]);
+  });
+
+  // general helpful replies
+  add('en','howapply','To apply, I can open the official portal link for you or give step-by-step instructions. Which scheme would you like to apply for?');
+  add('kn','howapply','ಅರ್ಜಿಗಾಗಿ ನಾನು ಅಧಿಕೃತ ಲಿಂಕ್ ತೆರೆಯಬಹುದು ಅಥವಾ ಹಂತ ಹಂತದ ಮಾರ್ಗದರ್ಶನ ನೀಡುತ್ತೇನೆ. ನೀವು ಯಾವ ಯೋಜನೆಗೆ ಅರ್ಜಿ ಹಾಕಲು ಇಚ್ಛಿಸುತ್ತೀರಿ?');
+  add('en','hello','Hello! Ask me about any listed scheme, e.g., "How to apply for PM-KISAN?"');
+  add('kn','hello','ನಮಸ್ಕಾರ! ಉದಾಹರಣೆಗೆ "PM-KISAN ಅಪ್ಲೈ ಹೇಗೆ?" ಎಂದು ಕೇಳಿ.');
+}
+buildCanned();
+
+/* ----------------------------
+   Language detection
+   - Kannada: presence of Kannada unicode range
+   - Hindi/Devanagari: presence of Devanagari chars
+   - else English
+   ---------------------------- */
+function detectLanguage(text){
+  if(!text) return 'en';
+  // Kannada Unicode block \u0C80-\u0CFF
+  if(/\p{Script=Kannada}/u.test(text)) return 'kn';
+  // Devanagari block \u0900-\u097F
+  if(/\p{Script=Devanagari}/u.test(text)) return 'hi';
+  // If user chose preferred language != auto, honor it via select elsewhere
+  return 'en';
+}
+
+/* ----------------------------
+   Human-like TTS: pick voice and speak in chunks
+   ---------------------------- */
+let userSelectedVoice = null;
+function populateVoices(){
+  const sel = document.getElementById('voiceSelect');
+  sel.innerHTML = '';
+  const voices = speechSynthesis.getVoices();
+  voices.forEach((v,i)=>{
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${v.name} — ${v.lang}`;
+    sel.appendChild(opt);
+  });
+  // select default (prefer en-IN/hi-IN/kn-IN)
+  // if no voices yet, will populate later
+}
+speechSynthesis.onvoiceschanged = populateVoices;
+populateVoices();
+
+// speak in language with small pauses and realistic rate
+function speakHuman(text, lang){
+  if(!('speechSynthesis' in window)) return;
+  // choose voice: if user selected, use that, else pick best match
+  const sel = document.getElementById('voiceSelect');
+  const voices = speechSynthesis.getVoices();
+  if(sel && sel.value!=='') userSelectedVoice = voices[parseInt(sel.value)] || null;
+
+  let chosen = userSelectedVoice;
+  if(!chosen){
+    // pick voice matching lang roughly
+    const pref = {kn:['kn-IN','kn-IN','en-IN'], hi:['hi-IN','en-IN'], en:['en-IN','en-GB','en-US']};
+    const candidates = voices.filter(v=>pref[lang].some(p=>v.lang.toLowerCase().includes(p.toLowerCase())));
+    chosen = candidates[0] || voices.find(v=>v.lang.startsWith(lang)) || voices[0];
+  }
+
+  // break text into sentences for natural pauses
+  const sentences = splitIntoNaturalChunks(text, 160);
+  // Stop any ongoing
+  window.speechSynthesis.cancel();
+  sentences.forEach((s, idx)=>{
+    const u = new SpeechSynthesisUtterance(s.trim());
+    u.voice = chosen || null;
+    u.lang = (lang==='kn') ? 'kn-IN' : (lang==='hi') ? 'hi-IN' : 'en-IN';
+    u.rate = 0.95 + (idx%2)*0.05; // slight variation
+    u.pitch = 1;
+    // small pause by scheduling: utterances queue automatically
+    window.speechSynthesis.speak(u);
+  });
+}
+
+function splitIntoNaturalChunks(text, maxLen=150){
+  // split by punctuation, else by words
+  const parts = text.split(/(?<=[.?!])\s+/);
+  const chunks = [];
+  let current = '';
+  parts.forEach(p=>{
+    if((current + ' ' + p).trim().length <= maxLen) current = (current + ' ' + p).trim();
+    else { if(current) chunks.push(current); current = p.trim(); }
+  });
+  if(current) chunks.push(current);
+  // if a single chunk is too long, split by words
+  return chunks.map(ch => ch.length>maxLen ? splitWords(ch, maxLen) : ch).flat();
+}
+function splitWords(text, maxLen){
+  const words = text.split(/\s+/);
+  const out = []; let cur = '';
+  words.forEach(w=>{
+    if((cur + ' ' + w).trim().length <= maxLen) cur = (cur + ' ' + w).trim();
+    else { out.push(cur); cur = w; }
+  });
+  if(cur) out.push(cur);
+  return out;
+}
+
+/* ----------------------------
+   NLU: find scheme + intent from user message
+   intents: info, howto, docs, eligibility, link, amount, apply
+   ---------------------------- */
+function parseIntentAndKey(message){
+  const m = message.toLowerCase();
+  const res = {intent:'info', key:null};
+  // find scheme id by id or name
+  const all = CENTRAL_SCHEMES.concat(STATE_SCHEMES);
+  for(const s of all){
+    if(m.includes(s.id) || m.includes(s.name.toLowerCase()) || m.includes(s.en.title && s.en.title.toLowerCase())){
+      res.key = s.id;
+      break;
+    }
+  }
+  // synonyms for intents
+  if(/\b(how|apply|application|apply for|ಅರ್ಜ|ಅಪ್ಲೈ|अप्लाई|कैसे)\b/.test(m)) res.intent='howto';
+  if(/\b(document|documents|docs|required|ಅಗತ್ಯ|ಪತ್ರ|दस्तावेज)\b/.test(m)) res.intent='docs';
+  if(/\b(eligi|eligible|who can|ಯೋಗ್ಯ|योग्य|ಯಾರಿಗೆ)\b/.test(m)) res.intent='eligibility';
+  if(/\b(amount|how much|₹|\bunits\b|रकम|ಮೊತ್ತ)\b/.test(m)) res.intent='amount';
+  if(/\b(link|website|portal|site|ಸೈಟ್|ವೆಬ್|वेबसाइट)\b/.test(m)) res.intent='link';
+  if(/\b(benefit|what is|tell|information|info|ಬಗೆ)\b/.test(m)) res.intent='info';
+  return res;
+}
+
+async function handleUserMessage(raw){
+  if(!raw) return;
+  // display user message
+  appendChat('user', raw);
+  // determine language: if preferredLanguage is set (not auto) use it, else auto-detect
+  const pref = document.getElementById('preferredLanguage').value;
+  const autoLang = detectLanguage(raw);
+  const lang = pref === 'auto' ? autoLang : pref;
+
+  // parse
+  const {intent, key} = parseIntentAndKey(raw);
+  let reply = '';
+
+  if(key){
+    const scheme = (CENTRAL_SCHEMES.concat(STATE_SCHEMES)).find(s=>s.id===key);
+    if(scheme){
+      // craft reply based on intent
+      if(intent==='howto') reply = `${scheme.en.title || scheme.name}. ${scheme.en.how || 'See the official portal for application steps.'}`;
+      else if(intent==='docs') reply = `Required documents for ${scheme.en.title || scheme.name}: ${(scheme.en.docs||[]).join(', ') || 'See official portal.'}`;
+      else if(intent==='eligibility') reply = `${scheme.en.title || scheme.name} — eligibility depends on scheme. Short: ${scheme.en.short}. For precise eligibility check the official portal: ${scheme.en.link}`;
+      else if(intent==='link') reply = `Open the official page here: ${scheme.en.link}`;
+      else if(intent==='amount') {
+        // try to detect amount in data by heuristics (use known schemes)
+        if(scheme.id==='pmkisan') reply = 'PM-KISAN provides ₹6,000 per year to eligible farmers (paid in 3 instalments).';
+        else if(scheme.id==='rythubandhu') reply = 'Rythu Bandhu provides ₹5,000 per acre per season in Telangana.';
+        else reply = `${scheme.en.title || scheme.name}: ${scheme.en.short}`;
+      } else {
+        // full info
+        reply = `${scheme.en.title || scheme.name}. ${scheme.en.short} How to apply: ${scheme.en.how || 'Visit official portal.'} Documents: ${(scheme.en.docs||[]).join(', ') || 'As per portal.'} Official: ${scheme.en.link}`;
+      }
+    } else {
+      reply = 'Sorry, I could not find that scheme. Please click the scheme on the left to ask about it, or try another name.';
+    }
+  } else {
+    // No direct scheme match -> try keyword-level canned replies
+    const k = raw.toLowerCase();
+    if(/\b(pmkisan|pm-kisan|pm kisan)\b/.test(k)) reply = canned.en['pmkisan'] || canned.en['hello'];
+    else if(/\b(pmfby|pmfby)\b/.test(k)) reply = canned.en['pmfby'] || canned.en['hello'];
+    else if(/\b(kcc|kisan credit|kisan credit card)\b/.test(k)) reply = canned.en['kcc'] || canned.en['hello'];
+    else {
+      // fallback: generic help
+      reply = (lang==='kn') ? canned.kn['hello'] : (lang==='hi') ? canned.hi['hello'] || canned.en['hello'] : canned.en['hello'];
+    }
+  }
+
+  // append bot message
+  appendChat('bot', reply);
+  // speak using chosen language
+  speakHuman(reply, lang);
+}
+
+/* helpers for chat log */
+function appendChat(who, text){
+  const log = document.getElementById('chatLog');
+  const d = document.createElement('div');
+  d.className = 'msg ' + (who==='user' ? 'user' : 'bot');
+  d.textContent = (who==='user' ? '👩‍🌾 ' : '🤖 ') + text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ----------------------------
+   Wire UI: send, mic, voice selection
+   ---------------------------- */
+document.getElementById('sendBtn').addEventListener('click', ()=> {
+  const val = document.getElementById('userInput').value.trim();
+  if(!val) return;
+  document.getElementById('userInput').value = '';
+  handleUserMessage(val);
+});
+document.getElementById('userInput').addEventListener('keypress', e=> { if(e.key==='Enter') document.getElementById('sendBtn').click(); });
+
+let recognition = null;
+if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.interimResults = false;
+  recognition.onresult = (e)=>{
+    const spoken = Array.from(e.results).map(r=>r[0].transcript).join('');
+    document.getElementById('userInput').value = spoken;
+    handleUserMessage(spoken);
+  };
+  recognition.onend = ()=> { document.getElementById('mic').style.opacity = '1'; }
+} else {
+  document.getElementById('mic').disabled = true;
+  document.getElementById('mic').title = 'Speech recognition not supported in this browser (use Chrome/Edge)';
+}
+
+document.getElementById('mic').addEventListener('click', ()=>{
+  if(!recognition) return alert('Speech recognition unavailable. Use Chrome/Edge.');
+  // if user has selected a language, set recognition accordingly; else auto-detect will happen after text
+  const pref = document.getElementById('preferredLanguage').value;
+  recognition.lang = (pref === 'auto') ? 'en-IN' : (pref==='kn'?'kn-IN':(pref==='hi'?'hi-IN':'en-IN'));
+  document.getElementById('mic').style.opacity = '0.6';
+  recognition.start();
+});
+
+// voice select populate when voices available
+function refreshVoiceList(){
+  const sel = document.getElementById('voiceSelect');
+  const voices = speechSynthesis.getVoices();
+  sel.innerHTML = '';
+  voices.forEach((v,i)=> {
+    const opt = document.createElement('option'); opt.value = i; opt.textContent = `${v.name} — ${v.lang}`; sel.appendChild(opt);
+  });
+}
+if(speechSynthesis.getVoices().length) refreshVoiceList();
+speechSynthesis.onvoiceschanged = refreshVoiceList;
+
+/* ----------------------------
+   Initialization
+   ---------------------------- */
+function init(){
+  renderLists();
+  updateChart();
+  // initial greeting
+  const hello = canned.en['hello'];
+  appendChat('bot', hello);
+  // speak initial greeting in english
+  speakHuman(hello, 'en');
+}
+renderLists = renderLists || null; // avoid lint
+renderLists && renderLists();
+init();
+
+</script>
+</body>
+</html>
